@@ -4,3 +4,6 @@
 [submodule "dpdk"]
 	path = dpdk
 	url = git://dpdk.org/dpdk
+[submodule "intel-ipsec-mb"]
+	path = intel-ipsec-mb
+	url = git@github.com:intel/intel-ipsec-mb.git
