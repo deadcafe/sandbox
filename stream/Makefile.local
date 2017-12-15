@@ -1,0 +1,34 @@
+export LANG=C
+CFLAGS  = -g -Werror -Wextra -Wall -Wstrict-aliasing -std=gnu11
+OPTFLAGS = -O3
+CFLAGS += $(OPTFLAGS)
+CPPFLAGS = -c -I. -I ../compat -D_GNU_SOURCE -DDEBUG_LOCAL
+LIBS = -ldl
+
+SRCS = \
+	stream.c
+
+OBJS = ${SRCS:.c=.o}
+DEPENDS = .depend
+TARGET = sm_test
+
+.SUFFIXES:	.o .c
+.PHONY:	all clean depend
+
+all	:	depend $(TARGET)
+
+.c.o	:
+	$(CC) $(CFLAGS) $(CPPFLAGS) $<
+
+$(TARGET):	$(OBJS)
+	$(CC) -o $@ $^ $(LIBS) $(LDFLAGS)
+
+$(OBJS)	:	Makefile.local
+
+clean:
+	rm -f $(OBJS) $(TARGET) $(DEPENDS) *~
+
+depend:	$(SRCS) Makefile
+	-@ $(CC) $(CPPFLAGS) -MM -MG $(SRCS) > $(DEPENDS)
+
+-include $(DEPENDS)

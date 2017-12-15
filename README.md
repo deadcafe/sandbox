@@ -1,1 +1,3 @@
-# sandbox
+# app
+make config
+make
