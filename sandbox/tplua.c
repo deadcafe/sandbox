@@ -10,13 +10,6 @@
 #include "lauxlib.h"
 
 
-struct flow_s {
-
-
-
-};
-
-
 int
 eng_reset(lua_State *L)
 {

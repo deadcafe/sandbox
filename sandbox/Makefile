@@ -1,5 +1,4 @@
 
-export LC_ALL=C
 
 
 DEV_ROOT ?= $(CURDIR)/..
@@ -17,7 +16,7 @@ CFLAGS += -fno-builtin
 #CFLAGS += -mavx2
 #-mtune=core2 -mavx
 
-CPPFLAGS = -c -I. -D_GNU_SOURCE -I$(LUA_INC_DIR)
+CPPFLAGS = -c -I. -D_GNU_SOURCE -I$(LUA_INC_DIR) -I$(FRAMEWORK_DIR)
 LIBS = $(LUA_LIB_DIR)/libluajit-5.1.a -ldl -lm 
 LDFLAGS =
 
