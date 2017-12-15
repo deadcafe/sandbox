@@ -57,4 +57,9 @@ dkms.conf
 !.gitmodules
 !.keepme
 *~
+*.orig
 build/
+GPATH
+GRTAGS
+GTAGS
+HTML/
