@@ -7,3 +7,6 @@
 [submodule "intel-ipsec-mb"]
 	path = intel-ipsec-mb
 	url = git@github.com:intel/intel-ipsec-mb.git
+[submodule "libpcap"]
+	path = libpcap
+	url = git@github.com:the-tcpdump-group/libpcap.git
