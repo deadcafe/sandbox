@@ -3,6 +3,8 @@
 #endif
 
 #include <sys/tree.h>
+//#include <netinet/ether.h>
+
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -16,6 +18,7 @@
 
 #include <rte_eal.h>
 #include <rte_errno.h>
+#include <rte_ether.h>
 
 #include "dc_mbuf.h"
 #include "dc_thread.h"
@@ -965,6 +968,40 @@ dc_conf_netdev_mbufpool(struct dc_conf_db_s *db,
                         const char *name)
 {
         return dc_conf_get_string(db, "/netdev/%s/mbufpool", name);
+}
+
+/*
+ * XXX: conflict <netinet/ether.h>
+ */
+extern struct ether_addr *ether_aton_r (const char *__asc,
+                                        struct ether_addr *__addr) __THROW;
+
+int
+dc_conf_netdev_mac(struct dc_conf_db_s *db,
+                   const char *name,
+                   struct ether_addr *addr)
+{
+        const char *asc = dc_conf_get_string(db, "/netdev/%s/mac", name);
+        if (asc) {
+                if (ether_aton_r(asc, addr))
+                        return 0;
+        }
+        return -1;
+}
+
+/*
+ *
+ */
+int
+dc_conf_add_netdev_mac(struct dc_conf_db_s *db,
+                       const char *name,
+                       const struct ether_addr *addr)
+{
+        char mac_asc[80];
+
+        ether_format_addr(mac_asc, sizeof(mac_asc), addr);
+
+        return dc_conf_add_string(db, mac_asc, "/netdev/%s/mac", name);
 }
 
 /*

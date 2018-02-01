@@ -1,9 +1,17 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <net/if_arp.h>
+
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include <rte_ethdev.h>
 #include <rte_eth_bond.h>
@@ -123,6 +131,30 @@ netdev_mbufpool(struct dc_conf_db_s *db,
         return dc_mbufpool(db, dc_conf_netdev_mbufpool(db, name));
 }
 
+static inline int
+set_mac_addr(struct dc_conf_db_s *db,
+             const char *name,
+             uint16_t id)
+{
+        struct ether_addr addr;
+        int ret = 0;
+
+        ret = dc_conf_netdev_mac(db, name, &addr);
+        if (ret) {
+                fprintf(stderr, "use MAC in NIC\n");
+                rte_eth_macaddr_get(id, &addr);
+                ret = dc_conf_add_netdev_mac(db, name, &addr);
+        } else {
+                ret = rte_eth_dev_default_mac_addr_set(id, &addr);
+                if (ret) {
+                        DC_FW_ERR("failed rte_eth_dev_default_mac_addr_set(): %s",
+                                  name);
+                }
+        }
+
+        return ret;
+}
+
 /*
  *
  */
@@ -151,9 +183,8 @@ create_netdev_ethdev(struct dc_conf_db_s *db,
         ret = rte_eth_dev_configure(id, nb_rx_q, nb_tx_q, &PortConf);
         if (!ret)
                 ret = rte_eth_dev_adjust_nb_rx_tx_desc(id, &nb_rxd, &nb_txd);
-
-        DC_FW_ERR("%s: nb_rxd:%u nb_txd:%u", name, nb_rxd, nb_txd);
-
+        else
+                DC_FW_ERR("%s: nb_rxd:%u nb_txd:%u", name, nb_rxd, nb_txd);
 
         for (int q = 0; q < nb_rx_q && !ret; q++) {
                 ret = rte_eth_rx_queue_setup(id,
@@ -170,14 +201,23 @@ create_netdev_ethdev(struct dc_conf_db_s *db,
                                              rte_eth_dev_socket_id(id),
                                              NULL);
         }
+        if (ret)
+                goto end;
 
-        if (rte_eth_dev_start(id)) {
+#if 0
+        ret = set_mac_addr(db, name, id);
+        if (ret)
+                goto end;
+#endif
+
+        ret = rte_eth_dev_start(id);
+        if (ret) {
                 DC_FW_ERR("failed rte_eth_dev_start(): %s", name);
-                return -1;
+                goto end;
         }
 
-        if (!ret)
-                ret = dc_conf_add_netdev_name_id(db, name, id, false);
+        ret = dc_conf_add_netdev_name_id(db, name, id, false);
+end:
         return ret;
 }
 
@@ -364,7 +404,12 @@ create_netdev_bonding(struct dc_conf_db_s *db,
                         return -1;
                 }
         }
-        rte_eth_promiscuous_enable(id);
+
+#if 0
+        ret = set_mac_addr(db, name, id);
+        if (ret)
+                return ret;
+#endif
 
         if (rte_eth_dev_start(id)) {
                 DC_FW_ERR("failed rte_eth_dev_start(): %s", name);
@@ -377,20 +422,46 @@ create_netdev_bonding(struct dc_conf_db_s *db,
 /*****************************************************************************
  *	kni device
  *****************************************************************************/
+static inline int
+set_linux_if_mac(const char *raw,
+                 uint16_t depend_id)
+{
+        int fd;
+        struct ifreq ifr;
+        int ret = -1;
+        struct ether_addr *addr = (struct ether_addr *) &ifr.ifr_hwaddr.sa_data[0];
+
+        memset(&ifr, 0, sizeof(ifr));
+        ifr.ifr_hwaddr.sa_family = ARPHRD_ETHER;
+        snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "kni_%s", raw);
+
+        rte_eth_macaddr_get(depend_id, addr);
+
+        fd = socket(AF_PACKET, SOCK_DGRAM, 0);
+        if (fd >= 0) {
+                ret = ioctl(fd, SIOCSIFHWADDR, &ifr);
+                if (ret)
+                        fprintf(stderr, "ioctl: %s\n", ifr.ifr_name);
+                close(fd);
+        }
+        return ret;
+}
+
 static int
 create_netdev_kni(struct dc_conf_db_s *db,
                   const char *raw)
 {
         char name[128];
-        const char *bind_dev;
+        const char *depend_dev;
+        uint16_t depend_id = DC_INVALID_ID;
         uint16_t id;
         struct rte_eth_conf null_conf;
 
         memset(&null_conf, 0, sizeof(null_conf));
 
-        bind_dev = dc_conf_netdev_depend(db, raw);
-        if (bind_dev) {
-                if (get_netdev(db, bind_dev, NULL))
+        depend_dev = dc_conf_netdev_depend(db, raw);
+        if (depend_dev) {
+                if (get_netdev(db, depend_dev, &depend_id))
                         return -1;
         }
 
@@ -403,6 +474,7 @@ create_netdev_kni(struct dc_conf_db_s *db,
                         DC_FW_ERR("failed rte_vdev_init: %s", raw);
                         return -1;
                 }
+
         }
 
         if (rte_eth_dev_get_port_by_name(name, &id)) {
@@ -423,10 +495,18 @@ create_netdev_kni(struct dc_conf_db_s *db,
                 DC_FW_ERR("failed rte_eth_tx_queue_setup(): %s", raw);
                 return -1;
         }
+
         if (rte_eth_dev_start(id)) {
                 DC_FW_ERR("failed rte_eth_dev_start(): %s", raw);
                 return -1;
         }
+
+#if 1
+        if (depend_id != DC_INVALID_ID) {
+                if (set_linux_if_mac(raw, depend_id))
+                        return -1;
+        }
+#endif
 
         DC_FW_DEBUG("started netdev: %s %u", raw, id);
         return dc_conf_add_netdev_name_id(db, raw, id, true);

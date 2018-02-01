@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <rte_ether.h>
+
 #include "dc_fw_log.h"
 
 #define DC_CONF_STRING_MAX	256
@@ -147,6 +149,14 @@ extern int dc_conf_netdev_nb_tx_queues(struct dc_conf_db_s *db,
 
 extern const char *dc_conf_netdev_mbufpool(struct dc_conf_db_s *db,
                                            const char *name);
+
+extern int dc_conf_netdev_mac(struct dc_conf_db_s *db,
+                              const char *name,
+                              struct ether_addr *addr);
+
+extern int dc_conf_add_netdev_mac(struct dc_conf_db_s *db,
+                                  const char *name,
+                                  const struct ether_addr *addr);
 
 extern const char *dc_conf_bonding_mode(struct dc_conf_db_s *db,
                                         const char *name);
