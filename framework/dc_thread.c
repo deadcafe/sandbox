@@ -411,11 +411,15 @@ disp_conf(const char *db_name,
           const struct dc_conf_s *conf,
           void *arg)
 {
-        (void) arg;
+        int *loop_p = arg;
         (void) conf;
         (void) db_name;
 
+        if (!(*loop_p))
+                DC_FW_DEBUG("<< Dump All %s items", db_name);
         DC_FW_DEBUG("%s key:%s %s", db_name, conf->name, conf->val);
+
+        (*loop_p) += 1;
         return 0;
 }
 
@@ -491,7 +495,10 @@ dc_thread_launch(struct dc_conf_db_s *db)
                 DC_FW_DEBUG("done lcore_id: %u", lcore_id);
         }
 
-        dc_conf_walk(db, disp_conf, NULL);
+        {
+                int loop = 0;
+                dc_conf_walk(db, disp_conf, &loop);
+        }
         sleep(3);
 
         ret = rte_eal_mp_remote_launch(thread_entry, NULL, CALL_MASTER);
