@@ -319,9 +319,10 @@ create_netdev_bonding(struct dc_conf_db_s *db,
                 if (ret)
                         return ret;
 
-                socket_id =
-                        rte_eth_dev_socket_id(dc_conf_netdev_name_id(db,
-                                                                     slaves[i]));
+                ret = dc_conf_netdev_name_id(db, slaves[i]);
+                if (ret < 0)
+                        return ret;
+                socket_id = rte_eth_dev_socket_id(ret);
         }
 
         mode = get_bonding_mode(db, name);
@@ -342,70 +343,79 @@ create_netdev_bonding(struct dc_conf_db_s *db,
                 return ret;
         }
 
-        if (rte_eth_dev_adjust_nb_rx_tx_desc(id, &nb_rxd, &nb_txd)) {
+        ret = rte_eth_dev_adjust_nb_rx_tx_desc(id, &nb_rxd, &nb_txd);
+        if (ret) {
                 DC_FW_ERR("failed rte_eth_dev_adjust_nb_rx_tx_desc(): %s",
                           name);
-                return -1;
+                return ret;
+        } else {
+                DC_FW_INFO("%s: nb_rxd:%u nb_txd:%u", name, nb_rxd, nb_txd);
         }
-        DC_FW_ERR("%s: nb_rxd:%u nb_txd:%u", name, nb_rxd, nb_txd);
 
         for (int q = 0; q < nb_rxq; q++) {
-                if (rte_eth_rx_queue_setup(id, q, nb_rxd, socket_id,
-                                           NULL,
-                                           netdev_mbufpool(db, name))) {
+                ret = rte_eth_rx_queue_setup(id, q, nb_rxd, socket_id,
+                                             NULL,
+                                             netdev_mbufpool(db, name));
+                if (ret) {
                         DC_FW_ERR("failed rte_eth_rx_queue_setup(): %s",
                                   name);
-                        return -1;
+                        return ret;
                 }
         }
 
         for (int q = 0; q < nb_txq; q++) {
-                if (rte_eth_tx_queue_setup(id, q, nb_txd, socket_id,
-                                           NULL)) {
+                ret = rte_eth_tx_queue_setup(id, q, nb_txd, socket_id, NULL);
+                if (ret) {
                         DC_FW_ERR("failed rte_eth_tx_queue_setup(): %s",
                                   name);
-                        return -1;
+                        return ret;
                 }
         }
 
         int msec = dc_conf_bondig_interval(db, name);
         if (msec >= 0) {
-                if (rte_eth_bond_link_monitoring_set(id, msec)) {
+                ret = rte_eth_bond_link_monitoring_set(id, msec);
+                if (ret) {
                         DC_FW_ERR("failed rte_eth_bond_link_monitoring_set(): %s",
                                   name);
-                        return -1;
+                        return ret;
                 }
         }
 
         msec = dc_conf_bondig_downdelay(db, name);
         if (msec >= 0) {
-                if (rte_eth_bond_link_down_prop_delay_set(id, msec)) {
+                ret = rte_eth_bond_link_down_prop_delay_set(id, msec);
+                if (ret) {
                         DC_FW_ERR("failed rte_eth_bond_link_down_prop_delay_set(): %s",
                                   name);
-                        return -1;
+                        return ret;
                 }
         }
 
         msec = dc_conf_bondig_updelay(db, name);
         if (msec >= 0) {
-                if (rte_eth_bond_link_up_prop_delay_set(id, msec)) {
+                ret = rte_eth_bond_link_up_prop_delay_set(id, msec);
+                if (ret) {
                         DC_FW_ERR("failed rte_eth_bond_link_up_prop_delay_set(): %s",
                                   name);
-                        return -1;
+                        return ret;
                 }
         }
 
         for (int i = 0; i < nb_slaves; i++) {
-                if (rte_eth_bond_slave_add(id,
-                                           dc_conf_netdev_name_id(db,
-                                                                  slaves[i]))) {
+                ret = dc_conf_netdev_name_id(db, slaves[i]);
+                if (ret < 0)
+                        return ret;
+
+                ret = rte_eth_bond_slave_add(id, ret);
+                if (ret) {
                         DC_FW_ERR("failed rte_eth_bond_slave_add(): %s",
                                   name);
-                        return -1;
+                        return ret;
                 }
         }
 
-#if 0
+#if 1
         ret = set_mac_addr(db, name, id);
         if (ret)
                 return ret;
