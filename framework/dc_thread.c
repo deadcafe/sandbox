@@ -415,7 +415,7 @@ disp_conf(const char *db_name,
         (void) conf;
         (void) db_name;
 
-        DC_FW_DEBUG("%s key:%s %s\n", db_name, conf->name, conf->val);
+        DC_FW_DEBUG("%s key:%s %s", db_name, conf->name, conf->val);
         return 0;
 }
 

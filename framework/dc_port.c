@@ -204,7 +204,7 @@ create_netdev_ethdev(struct dc_conf_db_s *db,
         if (ret)
                 goto end;
 
-#if 0
+#if 1
         ret = set_mac_addr(db, name, id);
         if (ret)
                 goto end;
