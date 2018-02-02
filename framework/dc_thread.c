@@ -416,7 +416,7 @@ disp_conf(const char *db_name,
         (void) db_name;
 
         if (!(*loop_p))
-                DC_FW_DEBUG("<< Dump All %s items", db_name);
+                DC_FW_DEBUG("<< Dump %s all items >>", db_name);
         DC_FW_DEBUG("%s key:%s %s", db_name, conf->name, conf->val);
 
         (*loop_p) += 1;
