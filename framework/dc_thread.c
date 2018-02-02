@@ -406,6 +406,19 @@ dc_thread_second(char *prog)
         return find_master_ctrl();
 }
 
+static int
+disp_conf(const char *db_name,
+          const struct dc_conf_s *conf,
+          void *arg)
+{
+        (void) arg;
+        (void) conf;
+        (void) db_name;
+
+        DC_FW_DEBUG("%s key:%s %s\n", db_name, conf->name, conf->val);
+        return 0;
+}
+
 int
 dc_thread_launch(struct dc_conf_db_s *db)
 {
@@ -478,6 +491,7 @@ dc_thread_launch(struct dc_conf_db_s *db)
                 DC_FW_DEBUG("done lcore_id: %u", lcore_id);
         }
 
+        dc_conf_walk(db, disp_conf, NULL);
         sleep(3);
 
         ret = rte_eal_mp_remote_launch(thread_entry, NULL, CALL_MASTER);
