@@ -415,6 +415,7 @@ create_netdev_bonding(struct dc_conf_db_s *db,
                 }
         }
 
+        rte_eth_promiscuous_enable(id);
 #if 1
         ret = set_mac_addr(db, name, id);
         if (ret)
