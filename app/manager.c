@@ -31,6 +31,8 @@ main(int ac,
         int opt, ret;
 
         memset(&conf, 0, sizeof(conf));
+        conf.fname = "sample.conf";
+
         while ((opt = getopt(ac, av, "f:2")) != -1) {
                 switch (opt) {
                 case 'f':
