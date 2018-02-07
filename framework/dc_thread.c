@@ -424,7 +424,8 @@ disp_conf(const char *db_name,
 }
 
 int
-dc_thread_launch(struct dc_conf_db_s *db)
+dc_thread_launch(struct dc_conf_db_s *db,
+                 void (*ringer_func)(void))
 {
         unsigned lcore_id;
         unsigned nb_slaves = 0;
@@ -500,6 +501,8 @@ dc_thread_launch(struct dc_conf_db_s *db)
                 dc_conf_walk(db, disp_conf, &loop);
         }
         sleep(3);
+
+        (*ringer_func)();
 
         ret = rte_eal_mp_remote_launch(thread_entry, NULL, CALL_MASTER);
         rte_eal_mp_wait_lcore();

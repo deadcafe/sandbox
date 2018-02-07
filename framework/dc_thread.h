@@ -143,7 +143,7 @@ struct dc_thread_s {
 
 struct dc_conf_db_s;
 
-extern int dc_thread_launch(struct dc_conf_db_s *db);
+extern int dc_thread_launch(struct dc_conf_db_s *db, void (*ringer_func)(void));
 extern unsigned dc_thread_lcores(struct dc_conf_db_s *db,
                                  char *buff,
                                  size_t size);

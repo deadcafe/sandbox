@@ -35,11 +35,6 @@ disp_conf(const char *db_name,
         return 0;
 }
 
-static void
-usage(const char *prog)
-{
-        fprintf(stderr, "%s [-f FILE]\n", prog);
-}
 
 int
 main(int ac,

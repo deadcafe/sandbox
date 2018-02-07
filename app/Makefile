@@ -28,7 +28,8 @@ SRCS-y := 		\
 	worker.c	\
 	tester.c	\
 	secondary.c	\
-	main.c
+	engine.c	\
+	manager.c
 
 include $(RTE_SDK)/mk/rte.extapp.mk
 
