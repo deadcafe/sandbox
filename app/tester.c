@@ -84,6 +84,8 @@ create_test_term_db(unsigned th,
                 for (unsigned i = 0; i < nb_ips; i++) {
                         for (unsigned j = 0; j < nb_ports; j++) {
                                 struct term_info_s *tinfo;
+                                be16_t port_src[3];
+                                be16_t port_dst[3];
 
                                 term->ip.src = rte_cpu_to_be_32(ip_base + i);
                                 term->ip.dst = idst;
@@ -91,14 +93,19 @@ create_test_term_db(unsigned th,
                                 term->udp.src = rte_cpu_to_be_16(port_base + j);
                                 term->udp.dst = rte_cpu_to_be_16(1234);
 
+                                port_src[0] = term->udp.src;
+                                port_dst[0] = term->udp.dst;
+                                port_src[1] = term->udp.src;
+                                port_dst[1] = term->udp.dst;
+                                port_src[2] = term->udp.src;
+                                port_dst[2] = term->udp.dst;
+
                                 eth_random_addr(term->eth.src.addr_bytes);
                                 term->eth.dst = edst;
 
                                 tinfo = assign_term(db->terget_db,
-                                                    4,
-                                                    &term->ip.src,
-                                                    term->udp.src,
-                                                    term->udp.src);
+                                                    term->ip.dst, port_dst,
+                                                    term->ip.src, port_src);
                                 if (!tinfo) {
                                         fprintf(stderr,
                                                 "failed to assign term\n");

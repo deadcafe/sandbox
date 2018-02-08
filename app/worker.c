@@ -41,7 +41,7 @@ route_mbuf(struct dc_task_s *task,
 static inline void
 rx_packet_proc(struct dc_task_s *task,
                struct rte_mbuf *m,
-               struct term_key_s *key,
+               struct term_key_v4_s *key,
                uint64_t ts)
 {
         uint64_t ol_flags = m->ol_flags;
@@ -49,9 +49,6 @@ rx_packet_proc(struct dc_task_s *task,
         struct mbuf_ext_s *ext = mbuf2ext(m);
 
         ext->ptype = 0;
-
-        key->addr[0] = UINT64_C(0);
-        key->addr[1] = UINT64_C(0);
 
         if (RTE_ETH_IS_TUNNEL_PKT(ptype)) {
                 DC_FW_ERR("tunnel packet");
@@ -90,12 +87,13 @@ rx_packet_proc(struct dc_task_s *task,
                 udp = rte_pktmbuf_mtod_offset(m,
                                               struct udp_hdr *,
                                               ext->hdr_lens.l2_len + ext->hdr_lens.l3_len);
-                key->ipv4_addr = ipv4->src_addr;
-                key->port = udp->src_port;
-                key->ip_ver = 4;
+                key->src_ip   = ipv4->src_addr;
+                key->dst_ip   = ipv4->dst_addr;
+                key->src_port = udp->src_port;
+                key->dst_port = udp->dst_port;
+                key->zero_pad = 0;
         } else {
-                key->port = 0;
-                key->ip_ver = 0;
+                memset(key, 0, sizeof(*key));
         }
         ext->rcv_tsc = ts;
         ext->rcv_thread_id = task->th->thread_id;
@@ -124,9 +122,9 @@ EthRecv_entry(struct dc_thread_s *th,
 
         nb = dc_port_recv(task->in_port, buff, RTE_DIM(buff));
         if (nb) {
-                struct term_key_s keys[nb];
+                struct term_key_v4_s keys[nb];
+                struct term_key_v4_s *keys_p[nb];
                 struct term_info_s *terms[nb];
-                struct term_key_s *keys_p[nb];
                 uint64_t hits = UINT64_C(0);
 
                 for (int i = 0; i < nb; i++) {
@@ -135,7 +133,7 @@ EthRecv_entry(struct dc_thread_s *th,
                 }
 
                 find_term(task->addon_task_ext[0],
-                          (const struct term_key_s **) keys_p,
+                          (const struct term_key_v4_s **) keys_p,
                           nb,
                           &hits,
                           terms);

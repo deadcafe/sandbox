@@ -16,6 +16,7 @@
 #define XXX_DB_NAME		"TermContextDB"
 
 
+
 /*****************************************************************************
  *	Termination
  *****************************************************************************/
@@ -78,8 +79,8 @@ create_term_db(unsigned nb_terms,
 
         memset(&param, 0, sizeof(param));
         param.name      = "term_db";
-        param.entries   = entries * 2;
-        param.key_len   = sizeof(struct term_key_s);
+        param.entries   = rte_align32pow2(nb_terms * 3);
+        param.key_len   = sizeof(struct term_key_v4_s);
         param.hash_func = rte_hash_crc;
         param.socket_id = rte_socket_id();
 
@@ -139,7 +140,7 @@ destroy_term_db(struct term_db_s *db)
  */
 int
 find_term(struct term_db_s *db,
-          const struct term_key_s **keys,
+          const struct term_key_v4_s **keys,
           unsigned nb_keys,
           uint64_t *hit_mask,
           struct term_info_s *term_pp[])
@@ -151,32 +152,85 @@ find_term(struct term_db_s *db,
 }
 
 static inline void
+set_key(struct term_key_v4_s *key,
+        be32_t node_ip,
+        be32_t server_ip,
+        be16_t node_port,
+        be16_t server_port)
+{
+        key->src_ip   = node_ip;
+        key->dst_ip   = server_ip;
+        key->src_port = node_port;
+        key->dst_port = server_port;
+        key->zero_pad = 0;
+}
+
+
+/*
+ * return:
+ *   matched:   0 ~ (nb_keys - 1)
+ *   unmatched: nb_keys
+ */
+static inline unsigned
+find_key_pos(const struct term_key_v4_s *key,
+             const struct term_key_v4_s *keys,
+             unsigned nb_keys)
+{
+        unsigned ret;
+
+        for (ret = 0; ret < nb_keys; ret++) {
+                if (!memcmp(key, &keys[ret], sizeof(*key)))
+                        break;
+        }
+        return ret;
+}
+
+static inline void
 init_term(struct term_info_s *term,
           struct term_db_s *db,
-          uint16_t ip_ver,
-          const void *addr,
-          be16_t port0,
-          be16_t port1)
+          be32_t server_ip,
+          const be16_t *server_ports,
+          be32_t node_ip,
+          const be16_t *node_ports)
 {
-        term->key[0].port = port0;
-        term->key[0].ip_ver = ip_ver;
+        unsigned nb_valid_keys = 0;
 
-        if (ip_ver == 4) {
-                term->key[0].addr[0] = UINT64_C(0);
-                term->key[0].addr[1] = UINT64_C(0);
-                memcpy(&term->key[0].ipv4_addr, addr,
-                       sizeof(term->key[0].ipv4_addr));
-        } else {
-                memcpy(&term->key[0].ipv6_addr, addr,
-                       sizeof(term->key[0].ipv6_addr));
+        for (unsigned i = 0; i < RTE_DIM(term->keys); i++) {
+                set_key(&term->keys[nb_valid_keys],
+                        node_ip, server_ip,
+                        node_ports[i], server_ports[i]);
+
+                /* check uniq key */
+                if (find_key_pos(&term->keys[nb_valid_keys],
+                                 term->keys, nb_valid_keys) == nb_valid_keys)
+                        nb_valid_keys++;
         }
 
-        memcpy(&term->key[1], &term->key[0], sizeof(term->key[1]));
-        term->key[1].port = port1;
-
+        term->nb_keys = nb_valid_keys;
         term->worker_id = INVALID_WORKER;
         term->ctx = NULL;
         term->db = db;
+}
+
+static int
+add_term_key(struct term_db_s *db,
+             struct term_info_s *term)
+{
+        int ret[term->nb_keys];
+
+        memset(ret, -1, sizeof(ret));
+        for (unsigned i = 0; i < term->nb_keys; i++) {
+                ret[i] = rte_hash_add_key_data(db->term_hash,
+                                               &term->keys[i], term);
+                if (ret[i])
+                        goto err;
+        }
+        return 0;
+
+ err:
+        for (unsigned i = 0; ret[i] == 0; i++)
+                rte_hash_del_key(db->term_hash, &term->keys[i]);
+        return -1;
 }
 
 /*
@@ -184,31 +238,26 @@ init_term(struct term_info_s *term,
  */
 struct term_info_s *
 assign_term(struct term_db_s *db,
-            uint16_t ip_ver,
-            const void *addr,
-            be16_t port0,
-            be16_t port1)
+            be32_t server_ip,
+            const be16_t *server_ports,
+            be32_t node_ip,
+            const be16_t *node_ports)
 {
         struct term_info_s *term;
 
         term = TAILQ_FIRST(&db->term_free);
         if (term) {
-                init_term(term, db, ip_ver, addr, port0, port1);
+                init_term(term, db,
+                          server_ip, server_ports,
+                          node_ip, node_ports);
 
-                if (rte_hash_add_key_data(db->term_hash, &term->key[0], term))
-                        return NULL;
-
-                if (port0 != port1) {
-                        if (rte_hash_add_key_data(db->term_hash, &term->key[1],
-                                                  term)) {
-                                rte_hash_del_key(db->term_hash, &term->key[0]);
-                                return NULL;
-                        }
+                if (add_term_key(db, term)) {
+                        term = NULL;
+                } else {
+                        TAILQ_REMOVE(&db->term_free, term, node);
+                        TAILQ_INSERT_TAIL(&db->term_used, term, node);
+                        db->term_assigned += 1;
                 }
-
-                TAILQ_REMOVE(&db->term_free, term, node);
-                TAILQ_INSERT_TAIL(&db->term_used, term, node);
-                db->term_assigned += 1;
         }
         return term;
 }
@@ -221,9 +270,8 @@ release_term(struct term_info_s *term)
 {
         struct term_db_s *db = term->db;
 
-        rte_hash_del_key(db->term_hash, &term->key[0]);
-        if (term->key[0].port != term->key[1].port)
-                rte_hash_del_key(db->term_hash, &term->key[1]);
+        for (unsigned i = 0; i < term->nb_keys; i++)
+                rte_hash_del_key(db->term_hash, &term->keys[i]);
 
         TAILQ_REMOVE(&db->term_used, term, node);
         TAILQ_INSERT_TAIL(&db->term_free, term, node);
